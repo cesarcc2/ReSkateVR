@@ -60,6 +60,10 @@ using ResizeFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT, UINT, 
 using Resize1Fn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain3*, UINT, UINT, UINT, DXGI_FORMAT, UINT,
     const UINT*, IUnknown* const*);
 
+using ModeListFn = HRESULT(STDMETHODCALLTYPE*)(IDXGIOutput*, DXGI_FORMAT, UINT, UINT*, DXGI_MODE_DESC*);
+
+using ModeList1Fn = HRESULT(STDMETHODCALLTYPE*)(IDXGIOutput1*, DXGI_FORMAT, UINT, UINT*, DXGI_MODE_DESC1*);
+
 using DllNotificationFn = void(CALLBACK*)(ULONG, const void*, void*);
 
 using RegisterDllNotificationFn = LONG(NTAPI*)(ULONG, DllNotificationFn, void*, void**);
@@ -154,10 +158,12 @@ struct State {
     std::atomic<bool> prompt_input_active{false}; // DingoSDKOverlaySetPromptInputCapture
     bool show_on_ready = false;
     bool force_windowed = false;
+    // Client size requested by the launcher (RESKATE_WINDOW_WIDTH/HEIGHT); 0 keeps the game's.
+    UINT forced_width = 0, forced_height = 0;
     HANDLE stop_event = nullptr;
     HANDLE provider_event = nullptr;
     void* dll_notification_cookie = nullptr;
-    Hook factory, create, create_hwnd, present, present1, resize, resize1, fullscreen;
+    Hook factory, create, create_hwnd, present, present1, resize, resize1, fullscreen, modes, modes1;
     // The same four of other swapchain implementations: DXGI's own under a wrapper the game
     // was given (Streamline's), which is what presents when something else presents for the
     // game (Intel's frame generation does).
