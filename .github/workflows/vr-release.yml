@@ -19,6 +19,10 @@ on:
         description: Rebuild even if a VR release or a failure issue exists (replaces the release)
         type: boolean
         default: false
+      preview:
+        description: Build this branch as it is (no upstream tag applied) and keep the files as a run artifact; publish nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -49,10 +53,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.upstream_tag }}
           FORCE: ${{ inputs.force }}
+          PREVIEW: ${{ inputs.preview }}
         run: |
           set -euo pipefail
           latest=$(gh release view --repo "$UPSTREAM" --json tagName -q .tagName)
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "${PREVIEW:-false}" = "true" ]; then
+            # Its launcher.json and licences come from the newest upstream release.
+            newest=$(gh release list --repo "$UPSTREAM" --limit 1 --exclude-drafts --json tagName -q '.[0].tagName')
+            echo "tags=[\"$newest\"]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -n "${INPUT_TAG:-}" ]; then
             candidates="$INPUT_TAG"
           else
@@ -100,6 +111,7 @@ jobs:
     env:
       TAG: ${{ matrix.tag }}
       GH_TOKEN: ${{ github.token }}
+      PREVIEW: ${{ inputs.preview || false }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,8 +127,10 @@ jobs:
           git fetch --no-tags upstream "refs/tags/$TAG:refs/tags/$TAG"
           commits=$(git rev-list --reverse --no-merges upstream/main..HEAD)
           echo "VR commits:"; git log --oneline --no-merges upstream/main..HEAD
-          git checkout --detach "$TAG"
-          git cherry-pick $commits
+          if [ "$PREVIEW" != "true" ]; then
+            git checkout --detach "$TAG"
+            git cherry-pick $commits
+          fi
           version=${TAG#v}; version=${version%%-*}
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Cannot read a version from $TAG"; exit 1; }
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -148,7 +162,15 @@ jobs:
             --upstream-config upstream-release/launcher.json --upstream-zip "$(ls upstream-release/ReSkate-*.zip)" \
             --upstream-repo "$UPSTREAM" --upstream-tag "$TAG" --readme Extension/VR/release/README-VR.txt --out out
 
+      - name: Keep the preview files
+        if: env.PREVIEW == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reskate-vr-preview
+          path: out/
+
       - name: Publish
+        if: env.PREVIEW != 'true'
         env:
           LATEST: ${{ needs.plan.outputs.latest }}
           FORCE: ${{ inputs.force }}
@@ -183,7 +205,7 @@ jobs:
             --title "ReSkate VR $VERSION (ReSkate $TAG)" --notes-file notes.md "${flags[@]}"
 
       - name: Report a failure
-        if: failure()
+        if: failure() && env.PREVIEW != 'true'
         continue-on-error: true
         run: |
           gh issue create --repo "$GITHUB_REPOSITORY" --title "VR build failed: $TAG" --body \
