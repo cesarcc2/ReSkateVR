@@ -1058,7 +1058,9 @@ overlay::DebugModel on_client_debug_tick(std::uintptr_t base, std::uintptr_t cli
     }
     const bool no_bail_allowed = session_no_bail_allowed();
     // VR takes over the camera: first person, which carries the VR views, turns on by itself.
-    if (vr::wants_first_person(debug.first_person) && !request && can_control && camera_phase_observed) {
+    // Not while "Third person on foot" has handed the camera back: it resumes first person itself.
+    if (!debug.first_person_paused && vr::wants_first_person(debug.first_person) && !request && can_control &&
+        camera_phase_observed) {
         try {
             debug_action(trial, client, can_control, camera_phase_observed, {overlay::DebugAction::set_first_person, true},
                 error.value);
