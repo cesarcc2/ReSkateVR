@@ -1,6 +1,7 @@
 #include "Engine/Core/Platform/launcher_support.h"
 #include "skate_menu_internal.h"
 #include "Extension/Skater/drone_flight.h"
+#include "Extension/VR/vr.h"
 #include "skate_menu.h"
 #include "modding_menu.h"
 #include "skate_style.h"
@@ -817,10 +818,10 @@ constexpr std::array<const char*, page_count> page_subtitles{
     "Everything, a button away.", "Pick your spot. Set the vibe.", "Make the park yours.", "Ride it your way.",
     "Tune it. Drill it.", "What ReSkate adds to skate.", "Bring your crew.", "Pick up where you want.",
     "Bring your own.", "Your controls, your screen.", "Under the hood."};
-constexpr std::array<const char*, addon_count> addon_names{"ADDONS", "DRONE", "BOARD BREAK", "ROAD RASH", "HALL OF MEAT", "GRIND EXITS", "MUSIC"};
+constexpr std::array<const char*, addon_count> addon_names{"ADDONS", "DRONE", "BOARD BREAK", "ROAD RASH", "HALL OF MEAT", "GRIND EXITS", "MUSIC", "VR"};
 constexpr std::array<const char*, addon_count> addon_subtitles{
     "What ReSkate adds to skate.", "Take it to the sky.", "Slams snap your board.", "Bails leave their mark.", "Every bone counts.", "Pick the side you pop out.",
-    "Your sound, in the game."};
+    "Your sound, in the game.", "Ride it in a headset."};
 // The side rail's groups: the heading above the page that starts each.
 const char* group_of(int page) {
     switch (page) {
@@ -1367,6 +1368,7 @@ void draw_skate_menu(SkateMenu& menu, const Model& model, const CallbacksV3& cal
     menu.rail_indent = 0;
     if (trainer_page_wanted()) open_page(menu, page_sandbox);
     if (dingosdk::drone::menu_flag().exchange(false)) open_page(menu, page_addons, addon_drone); // `dronemenu`
+    if (dingosdk::vr::menu_flag().exchange(false)) open_page(menu, page_addons, addon_vr); // `vrmenu`
     menu.page = std::clamp(menu.page, 0, static_cast<int>(page_count) - 1);
     if (page_hidden(menu, model, menu.page)) menu.page = full ? page_home : page_map;
     menu_page_owns_pad().store(full && (menu.page == page_online || menu.recording_bind));

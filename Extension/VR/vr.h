@@ -16,6 +16,7 @@
 //   on_present / after_present   the game's Present thread (overlay hook)
 //   everything else              any thread
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -163,6 +164,12 @@ bool set_settings(const Settings& settings) noexcept;
 // True once after any change, for the profile to save.
 bool take_settings_changed() noexcept;
 void recenter() noexcept;
+// `vrmenu` asks for the ReSkate menu to open on Addons > VR; the menu takes the request when it
+// next draws.
+inline std::atomic<bool>& menu_flag() {
+    static std::atomic<bool> value{false};
+    return value;
+}
 
 // Named sets of VR settings. Built-in presets come first and cannot be deleted;
 // saved ones live in the local profile. Applying keeps VR on/off and the

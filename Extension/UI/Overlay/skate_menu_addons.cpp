@@ -3,6 +3,7 @@
 #include "Extension/UI/skate_theme.h"
 #include "Extension/UI/NativeMenu/native_tools_view.h"
 #include "Extension/Skater/drone_flight.h"
+#include "Extension/VR/vr.h"
 
 #include <algorithm>
 #include <array>
@@ -86,6 +87,10 @@ void all_addons(SkateMenu& menu, const Model& model) {
     next();
     addon_tile(menu, "addon-music", "MUSIC", "Spotify, YouTube Music, your own files and online radio through the game's music player.",
                nullptr, 0, addon_music);
+    next();
+    const bool vr_on = vr::settings().enabled, vr_running = vr::status().running;
+    addon_tile(menu, "addon-vr", "VR", "Ride in first person in an OpenXR headset: Virtual Desktop, Meta Horizon Link, SteamVR.",
+               vr_running ? "RUNNING" : vr_on ? "ON" : "OFF", vr_running ? skate_theme::good : skate_theme::tile_light, addon_vr);
 }
 }
 
@@ -100,7 +105,7 @@ void addons_page(SkateMenu& menu, const Model& model, const CallbacksV3& callbac
     // (LT / RT on a controller), without the hidden ones.
     if (menu.fullscreen_drawn) {
         static constexpr std::array<const char*, addon_count> names{"ALL ADDONS", "DRONE", "BOARD BREAK", "ROAD RASH", "HALL OF MEAT",
-                                                                    "GRIND EXITS", "MUSIC"};
+                                                                    "GRIND EXITS", "MUSIC", "VR"};
         std::vector<const char*> labels;
         std::vector<int> shown;
         for (int a = 0; a < addon_count; ++a)
@@ -119,6 +124,7 @@ void addons_page(SkateMenu& menu, const Model& model, const CallbacksV3& callbac
         else if (menu.addon == addon_road_rash) road_rash_addon(menu, model, callbacks);
         else if (menu.addon == addon_hall_of_meat) hall_of_meat_addon(menu, model, callbacks);
         else if (menu.addon == addon_grind_exits) grind_exits_addon(menu, model, callbacks);
+        else if (menu.addon == addon_vr) vr_controls(menu, model);
         else all_addons(menu, model);
         ImGui::EndChild();
         break;
@@ -275,6 +281,21 @@ void home_page(SkateMenu& menu, const Model& model, const CallbacksV3& callbacks
         if (home_tile(menu, "##hall-of-meat", "HALL OF MEAT", on_off(meat.enabled), size, meat.available && callbacks.queue_console_command,
                       meat.enabled, false, "Your bails show the bones they hurt and score a Meat card.") == 1)
             quietly(callbacks, meat.enabled ? "hallofmeat 0" : "hallofmeat 1");
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
+
+        // VR: reachable from a headset, where the window menu is hard to use.
+        const bool vr_on = vr::settings().enabled, vr_running = vr::status().running;
+        if (home_tile(menu, "##vr", "VR", vr_running ? "RUNNING" : on_off(vr_on), size, callbacks.queue_console_command, vr_on, false,
+                      "Show first person in your headset. Its settings are in Addons > VR.") == 1)
+            quietly(callbacks, vr_on ? "vr.enabled 0" : "vr.enabled 1");
+        place(width, 1);
+        if (home_tile(menu, "##vr-recenter", "RECENTER", "Look ahead", size, vr_running, false, false,
+                      "Make where you look now straight ahead in the headset.") == 1)
+            vr::recenter();
+        place(width, 2);
+        if (home_tile(menu, "##vr-settings", "VR SETTINGS", "View, comfort, controls", size, true, false, false,
+                      "Presets, seat, comfort and the controllers.", false) == 1)
+            open_page(menu, page_addons, addon_vr);
     }
     ImGui::Dummy(ImVec2(0, px(18)));
 
@@ -296,7 +317,7 @@ void home_page(SkateMenu& menu, const Model& model, const CallbacksV3& callbacks
         if (home_tile(menu, "##go-map", "MAP", "Travel, parks, time and weather", size, true, false, false, "Pick a map and load it.", false) == 1)
             open_page(menu, page_map);
         place(width, 3);
-        if (home_tile(menu, "##go-addons", "ADDONS", "Drone, Board Break, grind exits, music", size, true, false, false,
+        if (home_tile(menu, "##go-addons", "ADDONS", "Drone, Board Break, music, VR", size, true, false, false,
                       "What ReSkate adds to skate.", false) == 1)
             open_page(menu, page_addons, addon_all);
         place(width, 4);

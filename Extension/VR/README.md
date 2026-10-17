@@ -26,7 +26,7 @@ or the game's own main and pause menus), the game image is shown on a flat scree
 
 ## Stereo modes
 
-SKATER > VR > Stereo (`vr.stereo`):
+ADDONS > VR > Stereo (`vr.stereo`):
 - **Alternate eyes** (0): the camera moves to each eye in turn (each eye ~30 Hz with a 60 Hz camera).
 - **Side-by-side input** (1): a ReShade stereo shader (SuperDepth3D, Side by Side) draws both eyes into
   each frame; ReSkate splits it after the game's Present.
@@ -56,7 +56,7 @@ If depth looks wrong or doubled, change **Eye pairing** (`vr.frame_lag`, under A
 
 ### Presets
 
-SKATER > VR > Presets: **First person** (the defaults), **Third person** (behind the skater, like the
+ADDONS > VR > Presets: **First person** (the defaults), **Third person** (behind the skater, like the
 game's camera) and **Tiny world** (third person from far and high with a giant's eye separation: the
 skater looks like a small figure in a model world). Your own settings can be saved as presets too.
 
@@ -155,7 +155,7 @@ Settings are saved in the local profile under `ReSkate.VR.*`.
 | `vr_costume.cpp` | Feet only: the FeetOnly costume on the local skater and the hidden clothes keeper (runtime target) |
 | `vr_gamepad.cpp` | Right sticks the game's hook does not see (XInput slots, DirectInput Sony pads) |
 | `vr_console.cpp`, `vr_profile.cpp` | Console commands and saved settings (runtime target) |
-| `Extension/UI/Overlay/skate_menu_vr.cpp` | The SKATER > VR menu tab |
+| `Extension/UI/Overlay/skate_menu_vr.cpp` | The ADDONS > VR page (also a HOME tile and `vrmenu`) |
 
 Changes to existing files are kept small:
 - `overlay.h` / `overlay.cpp`: a generic present observer (`set_present_observer`), the menu-open state
@@ -189,4 +189,5 @@ Changes to existing files are kept small:
   depth arrives one frame after the image.
 - Temporal AA blends the two eyes in Alternate eyes mode; depth stereo is not affected.
 - Only square sizes from a windowed launcher start render larger than the monitor.
+- Turn frame generation off: with it, a wrapper swapchain presents the frames, and VR does not see them.
 - Like the rest of ReSkate, it is tied to the supported skate. build.

@@ -842,6 +842,7 @@ void render(IDXGISwapChain* presented, UINT flags) {
     const bool hub_frame = hub_page_pending();
     if (trainer_open_requested()) s.visible.store(true);
     if (dingosdk::drone::menu_flag().load()) s.visible.store(true); // `dronemenu`: the menu opens on its DRONE page
+    if (dingosdk::vr::menu_flag().load()) s.visible.store(true); // `vrmenu`: on Addons > VR
     if (dingosdk::overlay::menu_open_flag().exchange(false)) s.visible.store(true); // `menu`, or its controller bind
     const bool menu_frame = interactive_visible(s);
     if (!menu_frame) {
