@@ -41,6 +41,9 @@ jobs:
       tags: ${{ steps.pick.outputs.tags }}
       latest: ${{ steps.pick.outputs.latest }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: pick
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,8 +59,17 @@ jobs:
             newest=$(gh release list --repo "$UPSTREAM" --limit 1 --exclude-drafts --json tagName -q '.[0].tagName')
             candidates=$(printf '%s\n%s\n' "$latest" "$newest" | sort -u)
           fi
+          # The VR commits are written against upstream main where this branch starts: a release made
+          # before that point lacks code they rely on, so it is not built.
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git fetch --quiet --no-tags upstream main
+          base=$(git merge-base HEAD upstream/main)
           tags=()
           for tag in $candidates; do
+            git fetch --quiet --no-tags upstream "refs/tags/$tag:refs/tags/$tag"
+            if ! git merge-base --is-ancestor "$base" "$tag"; then
+              echo "$tag: older than the VR branch's base ($(git log -1 --format=%h "$base")), skipped"; continue
+            fi
             if [ "${FORCE:-false}" != "true" ]; then
               if gh release view "$tag-vr" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
                 echo "$tag: VR release exists"; continue
