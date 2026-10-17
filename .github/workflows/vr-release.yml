@@ -148,6 +148,12 @@ jobs:
       - name: Build
         run: |
           set -euo pipefail
+          # With cargo present, upstream's CMake links the Spotify Connect helper and looks for a
+          # Windows import library among cargo's downloaded crates at configure time: a fresh runner
+          # has none yet, so they are fetched first.
+          (cd SpotifyHelper && cargo fetch --locked --target x86_64-pc-windows-msvc)
+          cargo_home=$(cygpath -u "${CARGO_HOME:-$USERPROFILE/.cargo}")
+          ls "$cargo_home"/registry/src/*/windows_x86_64_msvc-0.52.*/lib/windows.0.52.0.lib
           cmake --preset vs2022-x64 -DDINGOSDK_VERSION="$VERSION" -DDINGOSDK_LAUNCHER_AUTO_UPDATE=ON \
             -DDINGOSDK_RELEASE_REPO="$GITHUB_REPOSITORY" -DDINGOSDK_CRASH_REPORT_URL= -DDINGOSDK_BUILD_VR_TESTS=ON
           cmake --build --preset release --parallel --target dingosdk_launcher dingosdk_runtime dingosdk_vr_math_tests
