@@ -177,6 +177,16 @@ Changes to existing files are kept small:
   game image, and an open chat alone does not switch the headset to the flat screen.
 - Console registration, the menu tab, and CMake (`cmake/VR.cmake`, `cmake/Runtime.cmake`).
 
+## Releases
+
+VR builds are released on this fork, not upstream. `.github/workflows/vr-release.yml` checks upstream
+every two hours; for each new ReSkate release it applies this branch's VR commits (those upstream main
+does not have) to that release, builds with `DINGOSDK_RELEASE_REPO` = this repository and launcher
+updates on, and publishes `<tag>-vr` with a `launcher.json` (`release/make_release.py`). A VR launcher
+therefore keeps its updates on and moves players to each ReSkate version with VR included; the game
+build and the dedicated servers stay upstream's. A release that fails opens a "VR build failed" issue.
+`openxr_loader.dll` comes from Khronos's release zip, pinned by SHA-256, and ships only in the zip.
+
 ## Known limitations
 
 - The game's HUD and the menus are part of the game image, so they sit at screen depth (the chat has

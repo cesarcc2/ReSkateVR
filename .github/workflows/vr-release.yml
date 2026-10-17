@@ -1,0 +1,179 @@
+# ReSkate VR releases: for each new ReSkate release upstream, the VR commits are applied on top of it,
+# built, and published here with a launcher.json, so a VR launcher (built with DINGOSDK_RELEASE_REPO =
+# this repository) updates players to ReSkate's new version with VR included.
+#
+# The VR commits are this branch's commits that upstream main does not have. A release that fails
+# (the commits do not apply, the build or the tests fail) opens an issue "VR build failed: <tag>"
+# and is not retried while that issue is open; fix the branch, close the issue, run again.
+name: VR release
+
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Upstream release tag to build (empty = the newest release and pre-release)
+        required: false
+      force:
+        description: Rebuild even if a VR release or a failure issue exists (replaces the release)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: vr-release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: Dingo-Shenanigans/ReSkate
+  OPENXR_VERSION: '1.1.63'
+  OPENXR_ZIP_SHA256: 01c631aeabbfe0879540f77ef833416c532a20746285b494630160c23588b771
+  OPENXR_DLL_SHA256: 66946ea6e9cc2649e299ec412521c5eafe56c635d05055097fe4db81e11932df
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.pick.outputs.tags }}
+      latest: ${{ steps.pick.outputs.latest }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.upstream_tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          latest=$(gh release view --repo "$UPSTREAM" --json tagName -q .tagName)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ -n "${INPUT_TAG:-}" ]; then
+            candidates="$INPUT_TAG"
+          else
+            newest=$(gh release list --repo "$UPSTREAM" --limit 1 --exclude-drafts --json tagName -q '.[0].tagName')
+            candidates=$(printf '%s\n%s\n' "$latest" "$newest" | sort -u)
+          fi
+          tags=()
+          for tag in $candidates; do
+            if [ "${FORCE:-false}" != "true" ]; then
+              if gh release view "$tag-vr" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                echo "$tag: VR release exists"; continue
+              fi
+              open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"VR build failed: $tag\" in:title" \
+                --json number -q length 2>/dev/null || echo 0)
+              if [ "$open" != "0" ]; then echo "$tag: a failure issue is open"; continue; fi
+            fi
+            echo "$tag: to build"
+            tags+=("$tag")
+          done
+          if [ ${#tags[@]} -eq 0 ]; then echo 'tags=[]' >> "$GITHUB_OUTPUT"
+          else echo "tags=$(printf '%s\n' "${tags[@]}" | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.tags != '[]'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        tag: ${{ fromJson(needs.plan.outputs.tags) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ matrix.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply the VR commits to the upstream release
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git fetch --no-tags upstream main
+          git fetch --no-tags upstream "refs/tags/$TAG:refs/tags/$TAG"
+          commits=$(git rev-list --reverse --no-merges upstream/main..HEAD)
+          echo "VR commits:"; git log --oneline --no-merges upstream/main..HEAD
+          git checkout --detach "$TAG"
+          git cherry-pick $commits
+          version=${TAG#v}; version=${version%%-*}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Cannot read a version from $TAG"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: OpenXR loader (Khronos release, pinned)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o openxr.zip "https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-$OPENXR_VERSION/openxr_loader_windows-$OPENXR_VERSION.zip"
+          echo "$OPENXR_ZIP_SHA256  openxr.zip" | sha256sum -c -
+          mkdir -p openxr
+          python -I -c "import sys, zipfile; open(sys.argv[2], 'wb').write(zipfile.ZipFile(sys.argv[1]).read('x64/bin/openxr_loader.dll'))" \
+            openxr.zip openxr/openxr_loader.dll
+          echo "$OPENXR_DLL_SHA256  openxr/openxr_loader.dll" | sha256sum -c -
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cmake --preset vs2022-x64 -DDINGOSDK_VERSION="$VERSION" -DDINGOSDK_LAUNCHER_AUTO_UPDATE=ON \
+            -DDINGOSDK_RELEASE_REPO="$GITHUB_REPOSITORY" -DDINGOSDK_CRASH_REPORT_URL= -DDINGOSDK_BUILD_VR_TESTS=ON
+          cmake --build --preset release --parallel --target dingosdk_launcher dingosdk_runtime dingosdk_vr_math_tests
+          ctest --test-dir build/vs2022-x64 -C Release -R vr_math --output-on-failure
+
+      - name: Stage the release
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$UPSTREAM" -p launcher.json -p 'ReSkate-*.zip' -D upstream-release
+          python -I Extension/VR/release/make_release.py --version "$VERSION" --binaries build/vs2022-x64/Release \
+            --openxr-loader openxr/openxr_loader.dll --openxr-license External/openxr/LICENSE \
+            --upstream-config upstream-release/launcher.json --upstream-zip "$(ls upstream-release/ReSkate-*.zip)" \
+            --upstream-repo "$UPSTREAM" --upstream-tag "$TAG" --readme Extension/VR/release/README-VR.txt --out out
+
+      - name: Publish
+        env:
+          LATEST: ${{ needs.plan.outputs.latest }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          release="$TAG-vr"
+          if [ "${FORCE:-false}" = "true" ]; then
+            gh release delete "$release" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+            git push origin ":refs/tags/$release" 2>/dev/null || true
+          fi
+          git tag -a "$release" -m "ReSkate VR on ReSkate $TAG"
+          git push origin "refs/tags/$release"
+          flags=()
+          if [ "$(gh release view "$TAG" --repo "$UPSTREAM" --json isPrerelease -q .isPrerelease)" = "true" ]; then
+            flags+=(--prerelease)
+          elif [ "$TAG" = "$LATEST" ]; then
+            flags+=(--latest)
+          else
+            flags+=(--latest=false)
+          fi
+          {
+            echo "ReSkate **$TAG** with VR, built automatically from [the upstream release](https://github.com/$UPSTREAM/releases/tag/$TAG)."
+            echo
+            echo "- New install: unzip \`ReSkateVR-$VERSION.zip\` into an empty folder and run \`ReSkateLauncher.exe\`."
+            echo "- Already on ReSkate VR: the launcher updates by itself. Keep its updates on."
+            echo "- In game: ReSkate menu > HOME > VR, or ADDONS > VR. Turn frame generation off."
+            echo
+            echo "VR commits:"
+            git log --format='- %s' --no-merges "$TAG..HEAD"
+          } > notes.md
+          gh release create "$release" out/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "ReSkate VR $VERSION (ReSkate $TAG)" --notes-file notes.md "${flags[@]}"
+
+      - name: Report a failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "VR build failed: $TAG" --body \
+            "The VR release for upstream $TAG failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          Fix the VR branch (rebase it onto upstream if the commits no longer apply), close this issue, and run the workflow again."
