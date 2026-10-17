@@ -102,6 +102,14 @@ void register_vr_commands(Commands& registry) {
     };
     registry.add(std::move(recenter));
 
+    auto menu = action("vrmenu", "Open the ReSkate menu on Addons > VR", Group::graphics);
+    menu.inspect = [](const Model&) { return State{true, {}, {}, {}, false}; };
+    menu.run = [](const Model&, const Values&, const Output& out) {
+        vr::menu_flag().store(true);
+        out("Opening Addons > VR.");
+    };
+    registry.add(std::move(menu));
+
     flag(registry, "vr.enabled", "Show first person in an OpenXR headset", &Settings::enabled);
     flag(registry, "vr.auto_first_person", "Turn first person (the VR camera) on by itself while the headset runs",
         &Settings::auto_first_person);

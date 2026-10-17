@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <format>
 
-// SKATER > VR: first person in an OpenXR headset. Cards: headset, presets, view, comfort,
+// Addons > VR: first person in an OpenXR headset. Cards: headset, presets, view, comfort,
 // controls, image, and advanced (hidden until asked for). Settings that do not apply to the
 // current choices are not shown.
 namespace dingosdk::overlay::menu {
