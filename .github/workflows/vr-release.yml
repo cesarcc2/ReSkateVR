@@ -71,7 +71,8 @@ jobs:
             candidates=$(printf '%s\n%s\n' "$latest" "$newest" | sort -u)
           fi
           # The VR commits are written against upstream main where this branch starts: a release made
-          # before that point lacks code they rely on, so it is not built.
+          # before that point lacks code they rely on, so it is not built, unless a branch vr-<tag> here
+          # holds the VR commits rebased onto it (upstream main moved on before its VR release).
           git remote add upstream "https://github.com/$UPSTREAM.git"
           git fetch --quiet --no-tags upstream main
           base=$(git merge-base HEAD upstream/main)
@@ -79,7 +80,11 @@ jobs:
           for tag in $candidates; do
             git fetch --quiet --no-tags upstream "refs/tags/$tag:refs/tags/$tag"
             if ! git merge-base --is-ancestor "$base" "$tag"; then
-              echo "$tag: older than the VR branch's base ($(git log -1 --format=%h "$base")), skipped"; continue
+              if git ls-remote --exit-code --heads origin "vr-$tag" >/dev/null; then
+                echo "$tag: older than the VR branch's base, built from branch vr-$tag"
+              else
+                echo "$tag: older than the VR branch's base ($(git log -1 --format=%h "$base")) and no branch vr-$tag, skipped"; continue
+              fi
             fi
             if [ "${FORCE:-false}" != "true" ]; then
               if gh release view "$tag-vr" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -125,6 +130,11 @@ jobs:
           git remote add upstream "https://github.com/$UPSTREAM.git"
           git fetch --no-tags upstream main
           git fetch --no-tags upstream "refs/tags/$TAG:refs/tags/$TAG"
+          # A release older than this branch's base is built from vr-<tag> (see plan).
+          if [ "$PREVIEW" != "true" ] && ! git merge-base --is-ancestor "$(git merge-base HEAD upstream/main)" "$TAG"; then
+            git fetch --no-tags origin "refs/heads/vr-$TAG"
+            git checkout --detach FETCH_HEAD
+          fi
           commits=$(git rev-list --reverse --no-merges upstream/main..HEAD)
           echo "VR commits:"; git log --oneline --no-merges upstream/main..HEAD
           if [ "$PREVIEW" != "true" ]; then
